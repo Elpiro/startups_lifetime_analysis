@@ -47,8 +47,8 @@ startups$last_milestone_at[is.na(startups$last_milestone_at)] <- startups$last_f
 end_date <- startups$last_milestone_at
 
 if(FALSE){
-end_date <- startups$last_funding_at #or end_date ? <- startups$last_milestone_at 
-                                     #for startups that are acquired, the last_mileston could be better
+end_date <- startups$last_funding_at #or end_date <- startups$last_milestone_at ?
+                                     #for startups that are acquired, the last_milestone could be better
                                      # startups[which(startups$status=="acquired"), c("last_funding_at","last_milestone_at")]
 }
 
@@ -197,7 +197,7 @@ for (i in 1:dim(funding_round_type_surv_shaped)[1]){
 
 library(ggplot2)
 
-censoring_date <- 3*365
+censoring_date <- 15*365
 
 graph_area_subset <- startups[c("days_of_existence", "target")]
 closed_ones <- graph_area_subset[graph_area_subset$target == 1,]
@@ -240,11 +240,12 @@ surv_target <- Surv(time = temp_startups$days_of_existence, event = temp_startup
 surv_dataframe <- data.frame(surv_dataframe, final_rounds_count)
 surv_dataframe <- data.frame(surv_dataframe,surv_target)
 rm(temp_startups)
+rm(final_rounds_count)
 
 #TODO use function cut() to split numeric values into intervals
 
 #fitting model
-fit.KM <- survfit(surv_target~1, data=surv_dataframe)
+fit.KM <- survfit(surv_target ~ 1, data=surv_dataframe)
 plot(fit.KM, xlab="days operating")
 
   
