@@ -150,15 +150,10 @@ startups <- startups[!rows_to_remove,]
 #cleaned dataset
 summary(startups)
 
-#todo : impute missing values in funding_total_usd from raised_amount_usd
+#TODO : impute missing values in funding_total_usd from raised_amount_usd
 
--
+
 #______________removes the values prior to the lower_date_limit_____________#
-
-  
-  
-  
-  
 
 
 
@@ -246,48 +241,52 @@ surv_dataframe <- data.frame(surv_dataframe, final_rounds_count)
 surv_dataframe <- data.frame(surv_dataframe,surv_target)
 rm(temp_startups)
 
+#TODO use function cut() to split numeric values into intervals
 
 #fitting model
 fit.KM <- survfit(surv_target~1, data=surv_dataframe)
-plot(fit.KM)
+plot(fit.KM, xlab="days operating")
 
-if(FALSE){
-  fit <- coxph(surv_target~., data=surv_dataframe)
-  summary(fit)
-}
-
-
-
-#______________Survival analysis_____________#
-
-
-
-#-------------linear model--------------#
-
-
-startups <- left_join(rounds, startups, by = "company_name") #merging startups and rounds to get a linear model shaped dataframe
-rm(rounds) 
-
-startups_subset <- startups[c("company_category_code", "funding_rounds","funding_round_type","raised_amount_usd","funded_at","funding_total_usd","days_of_existence","target")]
-startups_subset <- startups_subset[complete.cases(startups_subset),]
-
-
-DUMMY <- startups_subset$company_category_code
-DUMMY <- model.matrix(~DUMMY)
-startups_subset <- data.frame(startups_subset, DUMMY)
-rm(DUMMY)
-
-DUMMY <- startups_subset$funding_round_type
-DUMMY <- model.matrix(~DUMMY)
-startups_subset <- data.frame(startups_subset, DUMMY)
-rm(DUMMY)
-
-
-startups_subset <- startups_subset[which(startups_subset$days_of_existence<censoring_date),]
-
-#for regression
-X <- as.matrix(startups_subset[,-which(names(startups_subset) %in% c("company_category_code","target","X.Intercept.", "X.Intercept..1"))])
-Y <- as.matrix(startups_subset[,c("target")])
-
-
-#____________linear model_____________#
+  
+  if(FALSE){
+    fit <- coxph(surv_target~., data=surv_dataframe)
+    summary(fit)
+  
+  
+  
+  #______________end of Survival analysis_____________#
+  
+  
+  
+  
+  #-------------linear model--------------#
+  
+  
+  startups <- left_join(rounds, startups, by = "company_name") #merging startups and rounds to get a linear model shaped dataframe
+  rm(rounds) 
+  
+  startups_subset <- startups[c("company_category_code", "funding_rounds","funding_round_type","raised_amount_usd","funded_at","funding_total_usd","days_of_existence","target")]
+  startups_subset <- startups_subset[complete.cases(startups_subset),]
+  
+  
+  DUMMY <- startups_subset$company_category_code
+  DUMMY <- model.matrix(~DUMMY)
+  startups_subset <- data.frame(startups_subset, DUMMY)
+  rm(DUMMY)
+  
+  DUMMY <- startups_subset$funding_round_type
+  DUMMY <- model.matrix(~DUMMY)
+  startups_subset <- data.frame(startups_subset, DUMMY)
+  rm(DUMMY)
+  
+  
+  startups_subset <- startups_subset[which(startups_subset$days_of_existence<censoring_date),]
+  
+  #for regression
+  X <- as.matrix(startups_subset[,-which(names(startups_subset) %in% c("company_category_code","target","X.Intercept.", "X.Intercept..1"))])
+  Y <- as.matrix(startups_subset[,c("target")])
+  
+  
+  #____________linear model_____________#
+  
+  }
