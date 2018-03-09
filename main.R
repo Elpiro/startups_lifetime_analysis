@@ -271,6 +271,18 @@ str(surv_dataframe)
 
 #TODO use function cut() to split numeric values into intervals
 
+surv_dataframe$funding_total_usd <- log(surv_dataframe$funding_total_usd + 1, base=10)
+surv_dataframe$angel <- log(surv_dataframe$angel + 1)
+surv_dataframe$crowdfunding <- log(surv_dataframe$crowdfunding + 1)
+surv_dataframe$other <- log(surv_dataframe$other + 1)
+surv_dataframe$post.ipo <- log(surv_dataframe$post.ipo + 1)
+surv_dataframe$private.equity <- log(surv_dataframe$private.equity + 1)
+surv_dataframe$series.a <- log(surv_dataframe$series.a + 1)
+surv_dataframe$series.b <- log(surv_dataframe$series.b + 1)
+surv_dataframe$series.c. <- log(surv_dataframe$series.c. + 1)
+surv_dataframe$venture <- log(surv_dataframe$venture + 1)
+
+
 #fitting model
 fit.KM <- survfit(surv_target ~ 1, data=surv_dataframe)
 plot(fit.KM, xlab="days operating", ylab="percentage operating")
