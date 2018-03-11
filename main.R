@@ -2,7 +2,7 @@
 
 path = "C:/Users/GALLICE/Documents/Perso/Etudes/DSTI/Cours/Survival Analysis/project/Data/crunchbase-october-2013-master/crunchbase-"
 
-datafile = "crunchbase-companies.csv"
+datafile = "companies.csv"
 startups <- read.csv(paste(path,datafile, sep= ""), 
                      sep = ',',
                      stringsAsFactors = FALSE)
@@ -116,6 +116,10 @@ t_categories <- t_categories[order(t_categories$Freq, decreasing=T),]
 graph_area_subset$category_code <- factor(graph_area_subset$category_code, levels=t_categories$categories, ordered=T)
 graph_area_subset$target <- factor(graph_area_subset$target)
 
+
+#taking opportunity to order the factor vector of startups:
+startups$category_code <- factor(startups$category_code, levels = t_categories$categories, ordered=T)
+
 ggplot(data=graph_area_subset,aes(x=category_code, group=target, fill=target)) + geom_histogram(stat="count") 
 
 rm(categories)
@@ -175,7 +179,7 @@ rm(graph_area_subset)
 
 library(dplyr)
 
-datafile = "crunchbase-rounds.csv"
+datafile = "rounds.csv"
 
 rounds <- read.csv(paste(path,datafile, sep= ""), 
                    sep = ',',
@@ -187,6 +191,8 @@ rounds <- rounds[order(rounds$company_name),]
 rounds$company_name <- sapply(rounds$company_name, as.character)
 
 rounds$funding_round_type <- factor(rounds$funding_round_type)
+
+rounds$funded_at <- as.Date(rounds$funded_at, "%Y-%m-%d")
 
 str(rounds)
 
@@ -209,29 +215,42 @@ library(survival)
 
 #converting factor funding_rounds from rounds, to columns of count of this factor
 
-funding_round_type_surv_shaped <- data.frame(matrix(data = 0, nrow=dim(startups)[1], ncol = 19))
+
+
+funding_round_type_surv_shaped <- data.frame(matrix(data = 0, nrow=dim(startups)[1], ncol = 28))
 col_names_fund_round_type <- levels(rounds$funding_round_type)
 types_counts <- paste("count_",levels(rounds$funding_round_type), sep="")
-names(funding_round_type_surv_shaped) <- c("company_name",col_names_fund_round_type, types_counts)
+time_fund <- paste("time_",levels(rounds$funding_round_type), sep="")
+names(funding_round_type_surv_shaped) <- c("company_name",col_names_fund_round_type, types_counts, time_fund)
 
 for (i in 1:dim(funding_round_type_surv_shaped)[1]){
   name <- startups$company_name[i]
   funding_round_type_surv_shaped[i,1] <- name
-  funding_rounds <- as.character(rounds$funding_round_type[which(rounds$company_name == name)])#get all funding rounds type for startup i 
+  
+  company_details <- which(rounds$company_name == name)
+  funding_rounds <- as.character(rounds$funding_round_type[company_details])#get all funding rounds type for startup i 
   if (length(funding_rounds) > 0){
     for (j in 1:length(funding_rounds)){
-      if (is.numeric(rounds$raised_amount_usd[which(rounds$company_name == name)][j])){
-        #adds value
-        funding_round_type_surv_shaped[i,funding_rounds[j]] <- rounds$raised_amount_usd[which(rounds$company_name == name)][j]
+      if (is.numeric(rounds$raised_amount_usd[company_details][j])){
+        
+        #adds the amount invested
+        funding_round_type_surv_shaped[i,funding_rounds[j]] <- rounds$raised_amount_usd[company_details][j]
         + funding_round_type_surv_shaped[i,funding_rounds[j]]
+        
       }
       else{
+        
         funding_round_type_surv_shaped[i,funding_rounds[j]] <- NA
-      }
+      
+        }
       
       #adds count to correponding type
       funding_round_type_surv_shaped[i,paste("count_", funding_rounds[j], sep ="")] <- 1 + funding_round_type_surv_shaped[i,paste("count_", funding_rounds[j], sep ="")]
       
+      funded_after_x_days <- rounds$funded_at[company_details][j] - startups$founded_at[i]
+      if (funding_round_type_surv_shaped[i,paste("time_", funding_rounds[j], sep ="")] == 0 ){
+        funding_round_type_surv_shaped[i,paste("time_", funding_rounds[j], sep ="")] <- funded_after_x_days
+      }
     }
   } 
 }
@@ -258,42 +277,98 @@ temp_startups <- startups[!rows_to_remove,]
 
 
 
-surv_target <- Surv(time = temp_startups$days_of_existence, event = temp_startups$target)
 
 surv_dataframe <- temp_startups[c("company_name","category_code", "funding_total_usd", "funding_rounds")]
+
+surv_dataframe$target_acquired <- c(rep(0,1,dim(surv_dataframe)[1]))
+surv_dataframe$target_closed <- c(rep(0,1,dim(surv_dataframe)[1]))
+
+for (i in 1:dim(surv_dataframe)[1]){
+  if (temp_startups$status[i] == "acquired"){
+    surv_dataframe$target_acquired[i] <- 1
+  }
+  if (temp_startups$status[i] == "closed"){
+    surv_dataframe$target_closed[i] <- 1
+  }
+}
+
+surv_target_all <- Surv(time = temp_startups$days_of_existence, event = temp_startups$target)
+surv_target_acquired <- Surv(time = temp_startups$days_of_existence, event = surv_dataframe$target_acquired)
+surv_target_closed <- Surv(time = temp_startups$days_of_existence, event = surv_dataframe$target_closed)
+
 surv_dataframe <- left_join(surv_dataframe, funding_round_type_surv_shaped, by="company_name")
-surv_dataframe <- data.frame(surv_dataframe,surv_target)
+surv_dataframe <- data.frame(surv_dataframe,surv_target_all)
+surv_dataframe <- data.frame(surv_dataframe,surv_target_acquired)
+surv_dataframe <- data.frame(surv_dataframe,surv_target_closed)
 surv_dataframe <- surv_dataframe[,-1]
 
 rm(temp_startups)
 rm(funding_round_type_surv_shaped)
+  
+
 str(surv_dataframe)
 
 #TODO use function cut() to split numeric values into intervals
 
+
+
+#Applying log on all money values
 surv_dataframe$funding_total_usd <- log(surv_dataframe$funding_total_usd + 1, base=10)
-surv_dataframe$angel <- log(surv_dataframe$angel + 1)
-surv_dataframe$crowdfunding <- log(surv_dataframe$crowdfunding + 1)
-surv_dataframe$other <- log(surv_dataframe$other + 1)
-surv_dataframe$post.ipo <- log(surv_dataframe$post.ipo + 1)
-surv_dataframe$private.equity <- log(surv_dataframe$private.equity + 1)
-surv_dataframe$series.a <- log(surv_dataframe$series.a + 1)
-surv_dataframe$series.b <- log(surv_dataframe$series.b + 1)
-surv_dataframe$series.c. <- log(surv_dataframe$series.c. + 1)
-surv_dataframe$venture <- log(surv_dataframe$venture + 1)
+surv_dataframe$angel <- log(surv_dataframe$angel + 1, base=10)
+surv_dataframe$crowdfunding <- log(surv_dataframe$crowdfunding + 1, base=10)
+surv_dataframe$other <- log(surv_dataframe$other + 1, base=10)
+surv_dataframe$post.ipo <- log(surv_dataframe$post.ipo + 1, base=10)
+surv_dataframe$private.equity <- log(surv_dataframe$private.equity + 1, base=10)
+surv_dataframe$series.a <- log(surv_dataframe$series.a + 1, base=10)
+surv_dataframe$series.b <- log(surv_dataframe$series.b + 1, base=10)
+surv_dataframe$series.c. <- log(surv_dataframe$series.c. + 1, base=10)
+surv_dataframe$venture <- log(surv_dataframe$venture + 1, base=10)
+
+
 
 
 #fitting model
-fit.KM <- survfit(surv_target ~ 1, data=surv_dataframe)
+fit.KM <- survfit(surv_target_all ~ 1, data=surv_dataframe)
 plot(fit.KM, xlab="days operating", ylab="percentage operating")
-
+par(new=T)
+fit.KM <- survfit(surv_target_acquired ~ 1, data=surv_dataframe)
+plot(fit.KM, xlab="days operating", ylab="percentage operating")
+par(new=T)
+fit.KM <- survfit(surv_target_closed ~ 1, data=surv_dataframe)
+plot(fit.KM, xlab="days operating", ylab="percentage operating")
+par(new=T)
   
+
+temp_surv_dataframe_software <- surv_dataframe[surv_dataframe$category_code == "software",]
+temp_surv_dataframe_biotech<- surv_dataframe[surv_dataframe$category_code == "biotech",]
+temp_surv_dataframe_web <- surv_dataframe[surv_dataframe$category_code == "web",]
+temp_surv_dataframe_mobile <- surv_dataframe[surv_dataframe$category_code == "mobile",]
+
+fit.KM <- survfit(surv_target_all ~ 1, data=temp_surv_dataframe_software)
+plot(fit.KM,col="blue", xmax=3500)
+par(new=T)
+fit.KM <- survfit(surv_target_acquired ~ 1, data=temp_surv_dataframe_biotech)
+plot(fit.KM,col="red", xmax=3500)
+par(new=T)
+fit.KM <- survfit(surv_target_closed ~ 1, data=temp_surv_dataframe_web)
+plot(fit.KM,col="purple", xmax=3500)
+par(new=T)
+fit.KM <- survfit(surv_target_all ~ 1, data=temp_surv_dataframe_mobile)
+plot(fit.KM,col="green", xlab="days operating", ylab="percentage operating", xmax=3500)
+
+
+
+
+
+
   if(FALSE){
     fit <- coxph(surv_target~., data=surv_dataframe)
     summary(fit)
   
   
   
+    
+    
   #______________end of Survival analysis_____________#
   
   
